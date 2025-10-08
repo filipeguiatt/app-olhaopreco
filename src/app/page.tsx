@@ -4,12 +4,11 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { mockStores } from '@/data/mockData';
 import { StoreItem } from '@/components/StoreItem';
 import { FavoriteProducts } from '@/components/FavoriteProducts';
-import { ApiConfig } from '@/components/ApiConfig';
 import { FavoritesProvider, useFavorites } from '@/contexts/FavoritesContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Heart, Search, TrendingDown, Settings, Loader2, Filter, Percent, TrendingUp, Star, Store as StoreIcon } from 'lucide-react';
+import { Heart, Search, TrendingDown, Loader2, Filter, Percent, TrendingUp, Star, Store as StoreIcon } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { searchRadioPopularProducts } from '@/services/radioPopularApi';
 import { Store, Product } from '@/types';
@@ -18,13 +17,14 @@ import { toast } from 'sonner';
 type FilterType = 'all' | 'promotion' | 'bestsellers' | 'favorites';
 type CategoryFilter = 'all' | 'Foto e Vídeo' | 'Lazer, Desporto e Outdoor' | 'Gaming' | 'Informática' | 'Televisão e Som' | 'Electrodomésticos' | 'Casa e Jardim' | 'Automóvel' | 'Saúde e Beleza' | 'Brinquedos' | 'Acessórios';
 
+// API Key configurada automaticamente no início da app
+const DEFAULT_API_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
+
 function MainContent() {
   const [currentView, setCurrentView] = useState<'main' | 'favorites'>('main');
   const [searchQuery, setSearchQuery] = useState('');
-  const [showApiConfig, setShowApiConfig] = useState(false);
   const [isSearchingApi, setIsSearchingApi] = useState(false);
   const [apiProducts, setApiProducts] = useState<Product[]>([]);
-  const [hasApiKey, setHasApiKey] = useState(false);
   const [activeFilter, setActiveFilter] = useState<FilterType>('all');
   const [selectedStore, setSelectedStore] = useState<string>('all');
   
@@ -33,6 +33,7 @@ function MainContent() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [hasMoreProducts, setHasMoreProducts] = useState(true);
   const [allLoadedProducts, setAllLoadedProducts] = useState<Product[]>([]);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
   
   // Estados para filtros de categoria da Rádio Popular
   const [selectedCategory, setSelectedCategory] = useState<CategoryFilter>('all');
@@ -41,25 +42,21 @@ function MainContent() {
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadingRef = useRef<HTMLDivElement>(null);
 
-  // Verificar se existe API key salva
+  // Configurar API key automaticamente no início
   useEffect(() => {
-    const savedApiKey = localStorage.getItem('radiopopular_api_key');
-    setHasApiKey(!!savedApiKey);
+    localStorage.setItem('radiopopular_api_key', DEFAULT_API_KEY);
   }, []);
 
   // Função para carregar produtos da API com categoria específica
   const loadProductsWithCategory = useCallback(async (category: CategoryFilter, page: number = 1, limit: number = 100) => {
-    const apiKey = localStorage.getItem('radiopopular_api_key');
-    if (!apiKey) return [];
-
     try {
       // Se categoria é 'all', buscar sem filtro
       if (category === 'all') {
-        return await searchRadioPopularProducts('', apiKey, page, limit);
+        return await searchRadioPopularProducts('', DEFAULT_API_KEY, page, limit);
       }
       
       // Buscar com categoria como pattern
-      return await searchRadioPopularProducts(category, apiKey, page, limit);
+      return await searchRadioPopularProducts(category, DEFAULT_API_KEY, page, limit);
     } catch (error) {
       console.error('Erro ao carregar produtos com categoria:', error);
       return [];
@@ -68,7 +65,7 @@ function MainContent() {
 
   // Função para carregar mais produtos (infinite scroll)
   const loadMoreProducts = useCallback(async () => {
-    if (isLoadingMore || !hasMoreProducts || !hasApiKey || searchQuery.trim()) return;
+    if (isLoadingMore || !hasMoreProducts || searchQuery.trim() || !initialLoadDone) return;
 
     setIsLoadingMore(true);
     try {
@@ -76,12 +73,9 @@ function MainContent() {
       
       if (newProducts.length === 0) {
         setHasMoreProducts(false);
-        toast.info('Todos os produtos foram carregados!');
       } else {
         setAllLoadedProducts(prev => [...prev, ...newProducts]);
         setCurrentPage(prev => prev + 1);
-        
-        toast.success(`${newProducts.length} novos produtos carregados!`);
       }
     } catch (error) {
       console.error('Erro ao carregar mais produtos:', error);
@@ -89,7 +83,7 @@ function MainContent() {
     } finally {
       setIsLoadingMore(false);
     }
-  }, [currentPage, isLoadingMore, hasMoreProducts, hasApiKey, searchQuery, selectedCategory, loadProductsWithCategory]);
+  }, [currentPage, isLoadingMore, hasMoreProducts, searchQuery, selectedCategory, loadProductsWithCategory, initialLoadDone]);
 
   // Configurar Intersection Observer para infinite scroll
   useEffect(() => {
@@ -99,7 +93,7 @@ function MainContent() {
 
     observerRef.current = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && selectedStore === 'radiopopular-api') {
+        if (entries[0].isIntersecting && selectedStore === 'radiopopular-api' && initialLoadDone) {
           loadMoreProducts();
         }
       },
@@ -115,12 +109,12 @@ function MainContent() {
         observerRef.current.disconnect();
       }
     };
-  }, [loadMoreProducts, selectedStore]);
+  }, [loadMoreProducts, selectedStore, initialLoadDone]);
 
   // Carregar produtos iniciais quando a app iniciar ou categoria mudar
   useEffect(() => {
     const loadInitialProducts = async () => {
-      if (hasApiKey && !searchQuery.trim()) {
+      if (!searchQuery.trim() && !initialLoadDone) {
         setIsLoadingMore(true);
         setAllLoadedProducts([]);
         setCurrentPage(1);
@@ -132,7 +126,7 @@ function MainContent() {
           if (initialProducts.length > 0) {
             setAllLoadedProducts(initialProducts);
             setCurrentPage(2);
-            toast.success(`${initialProducts.length} produtos carregados!`);
+            setInitialLoadDone(true);
           }
         } catch (error) {
           console.error('Erro ao carregar produtos iniciais:', error);
@@ -144,7 +138,15 @@ function MainContent() {
     };
 
     loadInitialProducts();
-  }, [hasApiKey, selectedCategory, searchQuery, loadProductsWithCategory]);
+  }, [selectedCategory, searchQuery, loadProductsWithCategory, initialLoadDone]);
+
+  // Reset quando categoria muda
+  useEffect(() => {
+    setInitialLoadDone(false);
+    setAllLoadedProducts([]);
+    setCurrentPage(1);
+    setHasMoreProducts(true);
+  }, [selectedCategory]);
 
   // Função para pesquisar na API da Rádio Popular
   const searchApiProducts = async (query: string) => {
@@ -156,19 +158,18 @@ function MainContent() {
 
     setIsSearchingApi(true);
     try {
-      const apiKey = localStorage.getItem('radiopopular_api_key');
-      const products = await searchRadioPopularProducts(query, apiKey || undefined, 1, 100);
+      const products = await searchRadioPopularProducts(query, DEFAULT_API_KEY, 1, 100);
       
       setApiProducts(products);
       
       if (products.length > 0) {
-        toast.success(`${products.length} produtos encontrados na Rádio Popular!`);
-      } else if (hasApiKey) {
-        toast.info('Nenhum produto encontrado na Rádio Popular para esta pesquisa.');
+        toast.success(`${products.length} produtos encontrados!`);
+      } else {
+        toast.info('Nenhum produto encontrado para esta pesquisa.');
       }
     } catch (error) {
       console.error('Erro ao pesquisar na API:', error);
-      toast.error('Erro ao pesquisar produtos na Rádio Popular.');
+      toast.error('Erro ao pesquisar produtos.');
     } finally {
       setIsSearchingApi(false);
     }
@@ -177,15 +178,11 @@ function MainContent() {
   // Pesquisar quando o termo de pesquisa mudar (com debounce)
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      if (hasApiKey) {
-        searchApiProducts(searchQuery);
-      } else {
-        setApiProducts([]);
-      }
+      searchApiProducts(searchQuery);
     }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [searchQuery, hasApiKey]);
+  }, [searchQuery]);
 
   // Filtrar produtos dos dados mock baseado na pesquisa
   const filteredStores = mockStores.map(store => ({
@@ -200,15 +197,16 @@ function MainContent() {
     id: 'radiopopular-api',
     name: 'Rádio Popular',
     color: '#0066CC',
-    products: (searchQuery.trim() ? apiProducts : allLoadedProducts).map((product, index) => ({
-      ...product,
-      id: `rp-${product.id || index}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` // ID único garantido
-    }))
+    products: (searchQuery.trim() ? apiProducts : allLoadedProducts)
+      .map((product, index) => ({
+        ...product,
+        id: `rp-${product.id || index}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`, // ID único garantido
+      }))
   };
 
-  // Função corrigida para detectar promoções
+  // Função para detectar promoções
   const isProductOnPromotion = (product: Product): boolean => {
-    // Verificar se tem desconto numérico válido (principal para Rádio Popular)
+    // Verificar se tem desconto numérico válido
     if (product.discount && !isNaN(product.discount) && product.discount > 0) {
       return true;
     }
@@ -217,6 +215,26 @@ function MainContent() {
     if (product.originalPrice && product.price && 
         !isNaN(product.originalPrice) && !isNaN(product.price) && 
         product.originalPrice > product.price) {
+      return true;
+    }
+    
+    return false;
+  };
+
+  // Função para detectar produtos mais vendidos/populares
+  const isBestseller = (product: Product): boolean => {
+    // Verificar se tem rating alto
+    if (product.rating && product.rating >= 4.0) {
+      return true;
+    }
+    
+    // Produtos com desconto alto são considerados mais vendidos
+    if (product.discount && product.discount > 20) {
+      return true;
+    }
+    
+    // Produtos com preço baixo são considerados populares
+    if (product.price < 50) {
       return true;
     }
     
@@ -232,14 +250,7 @@ function MainContent() {
         filteredProducts = store.products.filter(isProductOnPromotion);
         break;
       case 'bestsellers':
-        // Simular produtos mais vendidos (ordenar por desconto ou preço)
-        filteredProducts = store.products
-          .filter(p => p.discount || p.price < 100)
-          .sort((a, b) => (b.discount || 0) - (a.discount || 0));
-        break;
-      case 'favorites':
-        const favoriteIds = favorites.map(f => f.id);
-        filteredProducts = store.products.filter(p => favoriteIds.includes(p.id));
+        filteredProducts = store.products.filter(isBestseller);
         break;
       default:
         filteredProducts = store.products;
@@ -253,7 +264,7 @@ function MainContent() {
   
   // Para "Todas as Lojas", mostrar apenas 10 produtos mais populares de cada loja
   if (selectedStore === 'all') {
-    // Rádio Popular - 10 produtos mais populares (com desconto ou mais baratos)
+    // Rádio Popular - 10 produtos mais populares
     const radioPopularTop10 = radioPopularStore.products
       .sort((a, b) => {
         // Priorizar produtos com desconto
@@ -288,9 +299,9 @@ function MainContent() {
     
     allStores = [...allStores, ...otherStoresTop10];
   } else {
-    // Sempre mostrar Rádio Popular primeiro (mesmo sem produtos para mostrar que está disponível)
+    // Sempre mostrar Rádio Popular primeiro
     const filteredRadioPopular = applyFilter(radioPopularStore);
-    if (filteredRadioPopular.products.length > 0 || (!searchQuery && hasApiKey)) {
+    if (filteredRadioPopular.products.length > 0 || !searchQuery) {
       allStores.push(filteredRadioPopular);
     }
     
@@ -307,7 +318,7 @@ function MainContent() {
   // Obter lista de lojas disponíveis para os botões
   const availableStores = [
     { id: 'all', name: 'Todas as Lojas', color: '#6B7280' },
-    ...(hasApiKey || apiProducts.length > 0 || allLoadedProducts.length > 0 ? [{ id: 'radiopopular-api', name: 'Rádio Popular', color: '#0066CC' }] : []),
+    { id: 'radiopopular-api', name: 'Rádio Popular', color: '#0066CC' },
     ...mockStores.map(store => ({ id: store.id, name: store.name, color: store.color }))
   ];
 
@@ -318,8 +329,7 @@ function MainContent() {
   const filterButtons = [
     { key: 'all' as FilterType, label: 'Todos', icon: Filter },
     { key: 'promotion' as FilterType, label: 'Em Promoção', icon: Percent },
-    { key: 'bestsellers' as FilterType, label: 'Mais Vendidos', icon: TrendingUp },
-    { key: 'favorites' as FilterType, label: 'Favoritos', icon: Star }
+    { key: 'bestsellers' as FilterType, label: 'Mais Vendidos', icon: TrendingUp }
   ];
 
   const categoryButtons = [
@@ -339,6 +349,9 @@ function MainContent() {
 
   const isLoading = isSearchingApi || isLoadingMore;
 
+  // Contar produtos nos favoritos
+  const favoritesCount = favorites.length;
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
@@ -353,26 +366,11 @@ function MainContent() {
                 OlhaOPreço
               </h1>
               <p className="text-gray-600 dark:text-gray-400 mt-1">
-                Compara preços das melhores lojas portuguesas
-                {hasApiKey && (
-                  <Badge variant="secondary" className="ml-2 text-xs">
-                    API Rádio Popular ativa
-                  </Badge>
-                )}
+                Encontra as melhores ofertas ✨
               </p>
             </div>
 
             <div className="flex items-center gap-3">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowApiConfig(true)}
-                className="hidden sm:flex"
-              >
-                <Settings className="h-4 w-4 mr-2" />
-                API Config
-              </Button>
-              
               <Button
                 variant="outline"
                 onClick={() => setCurrentView('favorites')}
@@ -380,12 +378,12 @@ function MainContent() {
               >
                 <Heart className="h-4 w-4 mr-2" />
                 A Minha Lista
-                {favorites.length > 0 && (
+                {favoritesCount > 0 && (
                   <Badge 
                     variant="destructive" 
                     className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center text-xs"
                   >
-                    {favorites.length}
+                    {favoritesCount}
                   </Badge>
                 )}
               </Button>
@@ -399,24 +397,11 @@ function MainContent() {
               <Loader2 className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4 animate-spin" />
             )}
             <Input
-              placeholder={hasApiKey ? "Pesquisar produtos (inclui API da Rádio Popular)..." : "Pesquisar produtos..."}
+              placeholder="Pesquisar produtos..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10 pr-10 max-w-md"
             />
-          </div>
-
-          {/* Botão de configuração mobile */}
-          <div className="mt-4 sm:hidden">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowApiConfig(true)}
-              className="w-full"
-            >
-              <Settings className="h-4 w-4 mr-2" />
-              Configurar API da Rádio Popular
-            </Button>
           </div>
         </div>
       </div>
@@ -426,7 +411,7 @@ function MainContent() {
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center gap-2 mb-3">
             <StoreIcon className="h-4 w-4 text-gray-600 dark:text-gray-400" />
-            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Filtrar por loja:</span>
+            <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Lojas:</span>
           </div>
           <div className="flex flex-wrap gap-2">
             {availableStores.map((store) => (
@@ -485,21 +470,16 @@ function MainContent() {
             >
               <Icon className="h-4 w-4" />
               {label}
-              {key === 'favorites' && favorites.length > 0 && (
-                <Badge variant="secondary" className="ml-1 text-xs">
-                  {favorites.length}
-                </Badge>
-              )}
             </Button>
           ))}
         </div>
 
-        {/* Filtros de Categoria da Rádio Popular - MOVIDO PARA PERTO DOS PRODUTOS */}
-        {selectedStore === 'radiopopular-api' && hasApiKey && (
+        {/* Filtros de Categoria da Rádio Popular */}
+        {selectedStore === 'radiopopular-api' && (
           <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6">
             <div className="flex items-center gap-2 mb-3">
               <Filter className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-              <span className="text-sm font-medium text-blue-700 dark:text-blue-300">Categorias Rádio Popular:</span>
+              <span className="text-sm font-medium text-blue-700 dark:text-blue-300">Categorias:</span>
             </div>
             <div className="flex flex-wrap gap-2">
               {categoryButtons.map((category) => (
@@ -525,90 +505,6 @@ function MainContent() {
           </div>
         )}
 
-        {/* Resultados da pesquisa */}
-        {searchQuery && (
-          <div className="mb-6">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-              Resultados para "{searchQuery}"
-              {selectedStore !== 'all' && (
-                <span className="text-sm font-normal text-gray-600 dark:text-gray-400 ml-2">
-                  em {availableStores.find(s => s.id === selectedStore)?.name}
-                </span>
-              )}
-            </h2>
-            <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-              <span>
-                {allStores.reduce((sum, store) => sum + store.products.length, 0)} produtos encontrados
-              </span>
-              {apiProducts.length > 0 && selectedStore === 'all' && (
-                <Badge variant="secondary" className="text-xs">
-                  {apiProducts.length} da Rádio Popular
-                </Badge>
-              )}
-              {!hasApiKey && searchQuery && (
-                <Button
-                  variant="link"
-                  size="sm"
-                  onClick={() => setShowApiConfig(true)}
-                  className="text-xs p-0 h-auto"
-                >
-                  Configurar API para mais resultados
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Informação sobre produtos iniciais */}
-        {!searchQuery && (apiProducts.length > 0 || allLoadedProducts.length > 0) && (selectedStore === 'all' || selectedStore === 'radiopopular-api') && (
-          <div className="mb-6">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-              Produtos em Destaque
-              {selectedStore === 'radiopopular-api' && (
-                <span className="text-sm font-normal text-gray-600 dark:text-gray-400 ml-2">
-                  da Rádio Popular
-                </span>
-              )}
-            </h2>
-            <div className="flex items-center gap-4 text-sm text-gray-600 dark:text-gray-400">
-              <Badge variant="secondary" className="text-xs">
-                {allLoadedProducts.length} produtos da Rádio Popular
-              </Badge>
-              <span>Pesquise para encontrar produtos específicos</span>
-              {hasMoreProducts && (
-                <Badge variant="outline" className="text-xs">
-                  Carregamento automático ativo
-                </Badge>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Informação sobre filtros ativos */}
-        {(activeFilter !== 'all' || selectedStore !== 'all' || selectedCategory !== 'all') && (
-          <div className="mb-4 flex flex-wrap gap-2">
-            {activeFilter !== 'all' && (
-              <Badge variant="outline" className="text-sm">
-                Filtro: {filterButtons.find(f => f.key === activeFilter)?.label}
-              </Badge>
-            )}
-            {selectedStore !== 'all' && (
-              <Badge 
-                variant="outline" 
-                className="text-sm"
-                style={{ borderColor: availableStores.find(s => s.id === selectedStore)?.color }}
-              >
-                Loja: {availableStores.find(s => s.id === selectedStore)?.name}
-              </Badge>
-            )}
-            {selectedCategory !== 'all' && selectedStore === 'radiopopular-api' && (
-              <Badge variant="outline" className="text-sm" style={{ borderColor: '#0066CC' }}>
-                Categoria: {categoryButtons.find(c => c.key === selectedCategory)?.label}
-              </Badge>
-            )}
-          </div>
-        )}
-
         {/* Lista de lojas e produtos */}
         <div className="space-y-8">
           {allStores.map((store, storeIndex) => (
@@ -617,7 +513,7 @@ function MainContent() {
         </div>
 
         {/* Indicador de carregamento para infinite scroll */}
-        {selectedStore === 'radiopopular-api' && hasApiKey && !searchQuery.trim() && hasMoreProducts && (
+        {selectedStore === 'radiopopular-api' && !searchQuery.trim() && hasMoreProducts && initialLoadDone && (
           <div ref={loadingRef} className="text-center py-8">
             {isLoadingMore ? (
               <div className="flex items-center justify-center gap-2">
@@ -633,7 +529,7 @@ function MainContent() {
         )}
 
         {/* Mensagem quando não há mais produtos */}
-        {selectedStore === 'radiopopular-api' && hasApiKey && !searchQuery.trim() && !hasMoreProducts && allLoadedProducts.length > 0 && (
+        {selectedStore === 'radiopopular-api' && !searchQuery.trim() && !hasMoreProducts && allLoadedProducts.length > 0 && (
           <div className="text-center py-8">
             <div className="text-gray-600 dark:text-gray-400 mb-2">
               ✅ Todos os produtos foram carregados!
@@ -657,19 +553,10 @@ function MainContent() {
                 : activeFilter === 'all' 
                   ? selectedStore !== 'all' 
                     ? `Não há produtos disponíveis para ${availableStores.find(s => s.id === selectedStore)?.name}`
-                    : 'Configura a API da Rádio Popular para ver produtos reais'
+                    : 'Carregando produtos...'
                   : 'Não há produtos para este filtro'
               }
             </p>
-            {!hasApiKey && selectedStore === 'all' && (
-              <Button
-                variant="outline"
-                onClick={() => setShowApiConfig(true)}
-              >
-                <Settings className="h-4 w-4 mr-2" />
-                Configurar API da Rádio Popular
-              </Button>
-            )}
             {selectedStore !== 'all' && (
               <Button
                 variant="outline"
@@ -687,7 +574,7 @@ function MainContent() {
           <div className="text-center py-12">
             <Loader2 className="h-16 w-16 text-gray-300 mx-auto mb-4 animate-spin" />
             <h2 className="text-xl font-semibold text-gray-600 dark:text-gray-400 mb-2">
-              Carregando produtos da Rádio Popular...
+              Carregando produtos...
             </h2>
             <p className="text-gray-500 dark:text-gray-500">
               Aguarde enquanto buscamos os produtos disponíveis
@@ -695,25 +582,6 @@ function MainContent() {
           </div>
         )}
       </div>
-
-      {/* Modal de configuração da API */}
-      {showApiConfig && (
-        <ApiConfig onClose={() => {
-          setShowApiConfig(false);
-          // Verificar novamente se existe API key após fechar o modal
-          const savedApiKey = localStorage.getItem('radiopopular_api_key');
-          setHasApiKey(!!savedApiKey);
-          // Se há uma pesquisa ativa e agora temos API key, pesquisar novamente
-          if (searchQuery.trim() && savedApiKey) {
-            searchApiProducts(searchQuery);
-          } else if (!searchQuery.trim() && savedApiKey) {
-            // Recarregar produtos iniciais se não há pesquisa
-            setAllLoadedProducts([]);
-            setCurrentPage(1);
-            setHasMoreProducts(true);
-          }
-        }} />
-      )}
     </div>
   );
 }
