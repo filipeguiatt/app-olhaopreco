@@ -16,7 +16,7 @@ import { Store, Product } from '@/types';
 import { toast } from 'sonner';
 
 type FilterType = 'all' | 'promotion' | 'bestsellers' | 'favorites';
-type CategoryFilter = 'all' | 'Foto e Vídeo' | 'Lazer, Desporto e Outdoor' | 'Gaming' | 'Informática' | 'Televisão e Som' | 'Electrodomésticos' | 'Casa e Jardim' | 'Automóvel' | 'Saúde e Beleza' | 'Livros e Papelaria' | 'Brinquedos' | 'Moda e Acessórios';
+type CategoryFilter = 'all' | 'Foto e Vídeo' | 'Lazer, Desporto e Outdoor' | 'Gaming' | 'Informática' | 'Televisão e Som' | 'Electrodomésticos' | 'Casa e Jardim' | 'Automóvel' | 'Saúde e Beleza' | 'Brinquedos' | 'Acessórios';
 
 function MainContent() {
   const [currentView, setCurrentView] = useState<'main' | 'favorites'>('main');
@@ -47,119 +47,24 @@ function MainContent() {
     setHasApiKey(!!savedApiKey);
   }, []);
 
-  // Função para filtrar produtos por categoria
-  const filterProductsByCategory = (products: Product[], category: CategoryFilter): Product[] => {
-    if (category === 'all') return products;
-    
-    return products.filter(product => {
-      const productName = product.name.toLowerCase();
-      const productCategory = product.category?.toLowerCase() || '';
-      
-      switch (category) {
-        case 'Foto e Vídeo':
-          return productCategory.includes('foto') || 
-                 productCategory.includes('vídeo') ||
-                 productCategory.includes('video') ||
-                 productName.includes('camera') || 
-                 productName.includes('foto') || 
-                 productName.includes('video') ||
-                 productName.includes('lens') ||
-                 productName.includes('tripé') ||
-                 productName.includes('canon') ||
-                 productName.includes('nikon') ||
-                 productName.includes('sony');
-        case 'Lazer, Desporto e Outdoor':
-          return productCategory.includes('lazer') ||
-                 productCategory.includes('desporto') ||
-                 productCategory.includes('outdoor') ||
-                 productName.includes('desporto') || 
-                 productName.includes('outdoor') || 
-                 productName.includes('fitness') ||
-                 productName.includes('bicicleta') ||
-                 productName.includes('camping') ||
-                 productName.includes('ténis') ||
-                 productName.includes('futebol');
-        case 'Gaming':
-          return productCategory.includes('gaming') ||
-                 productCategory.includes('game') ||
-                 productName.includes('gaming') || 
-                 productName.includes('game') || 
-                 productName.includes('console') ||
-                 productName.includes('playstation') ||
-                 productName.includes('xbox') ||
-                 productName.includes('nintendo') ||
-                 productName.includes('pc gaming');
-        case 'Informática':
-          return productCategory.includes('informática') ||
-                 productCategory.includes('computador') ||
-                 productName.includes('laptop') ||
-                 productName.includes('computador') ||
-                 productName.includes('pc') ||
-                 productName.includes('monitor') ||
-                 productName.includes('teclado') ||
-                 productName.includes('rato') ||
-                 productName.includes('impressora');
-        case 'Televisão e Som':
-          return productCategory.includes('televisão') ||
-                 productCategory.includes('som') ||
-                 productCategory.includes('audio') ||
-                 productName.includes('tv') ||
-                 productName.includes('televisão') ||
-                 productName.includes('som') ||
-                 productName.includes('coluna') ||
-                 productName.includes('headphones') ||
-                 productName.includes('soundbar');
-        case 'Electrodomésticos':
-          return productCategory.includes('electrodomésticos') ||
-                 productCategory.includes('eletrodomésticos') ||
-                 productName.includes('frigorífico') ||
-                 productName.includes('máquina') ||
-                 productName.includes('forno') ||
-                 productName.includes('micro-ondas') ||
-                 productName.includes('aspirador');
-        case 'Casa e Jardim':
-          return productCategory.includes('casa') ||
-                 productCategory.includes('jardim') ||
-                 productName.includes('jardim') ||
-                 productName.includes('decoração') ||
-                 productName.includes('mobiliário') ||
-                 productName.includes('iluminação');
-        case 'Automóvel':
-          return productCategory.includes('automóvel') ||
-                 productCategory.includes('auto') ||
-                 productName.includes('carro') ||
-                 productName.includes('automóvel') ||
-                 productName.includes('pneu') ||
-                 productName.includes('óleo');
-        case 'Saúde e Beleza':
-          return productCategory.includes('saúde') ||
-                 productCategory.includes('beleza') ||
-                 productName.includes('cosmético') ||
-                 productName.includes('perfume') ||
-                 productName.includes('cuidado');
-        case 'Livros e Papelaria':
-          return productCategory.includes('livros') ||
-                 productCategory.includes('papelaria') ||
-                 productName.includes('livro') ||
-                 productName.includes('caderno') ||
-                 productName.includes('caneta');
-        case 'Brinquedos':
-          return productCategory.includes('brinquedos') ||
-                 productName.includes('brinquedo') ||
-                 productName.includes('jogo') ||
-                 productName.includes('puzzle');
-        case 'Moda e Acessórios':
-          return productCategory.includes('moda') ||
-                 productCategory.includes('acessórios') ||
-                 productName.includes('roupa') ||
-                 productName.includes('sapato') ||
-                 productName.includes('relógio') ||
-                 productName.includes('bolsa');
-        default:
-          return true;
+  // Função para carregar produtos da API com categoria específica
+  const loadProductsWithCategory = useCallback(async (category: CategoryFilter, page: number = 1, limit: number = 100) => {
+    const apiKey = localStorage.getItem('radiopopular_api_key');
+    if (!apiKey) return [];
+
+    try {
+      // Se categoria é 'all', buscar sem filtro
+      if (category === 'all') {
+        return await searchRadioPopularProducts('', apiKey, page, limit);
       }
-    });
-  };
+      
+      // Buscar com categoria como pattern
+      return await searchRadioPopularProducts(category, apiKey, page, limit);
+    } catch (error) {
+      console.error('Erro ao carregar produtos com categoria:', error);
+      return [];
+    }
+  }, []);
 
   // Função para carregar mais produtos (infinite scroll)
   const loadMoreProducts = useCallback(async () => {
@@ -167,20 +72,16 @@ function MainContent() {
 
     setIsLoadingMore(true);
     try {
-      const apiKey = localStorage.getItem('radiopopular_api_key');
-      const newProducts = await searchRadioPopularProducts('', apiKey || undefined, currentPage, 100);
+      const newProducts = await loadProductsWithCategory(selectedCategory, currentPage, 100);
       
       if (newProducts.length === 0) {
         setHasMoreProducts(false);
         toast.info('Todos os produtos foram carregados!');
       } else {
-        // Filtrar por categoria se selecionada
-        const filteredNewProducts = filterProductsByCategory(newProducts, selectedCategory);
-        
-        setAllLoadedProducts(prev => [...prev, ...filteredNewProducts]);
+        setAllLoadedProducts(prev => [...prev, ...newProducts]);
         setCurrentPage(prev => prev + 1);
         
-        toast.success(`${filteredNewProducts.length} novos produtos carregados!`);
+        toast.success(`${newProducts.length} novos produtos carregados!`);
       }
     } catch (error) {
       console.error('Erro ao carregar mais produtos:', error);
@@ -188,7 +89,7 @@ function MainContent() {
     } finally {
       setIsLoadingMore(false);
     }
-  }, [currentPage, isLoadingMore, hasMoreProducts, hasApiKey, searchQuery, selectedCategory]);
+  }, [currentPage, isLoadingMore, hasMoreProducts, hasApiKey, searchQuery, selectedCategory, loadProductsWithCategory]);
 
   // Configurar Intersection Observer para infinite scroll
   useEffect(() => {
@@ -216,20 +117,22 @@ function MainContent() {
     };
   }, [loadMoreProducts, selectedStore]);
 
-  // Carregar produtos iniciais quando a app iniciar
+  // Carregar produtos iniciais quando a app iniciar ou categoria mudar
   useEffect(() => {
     const loadInitialProducts = async () => {
-      if (hasApiKey && allLoadedProducts.length === 0 && !searchQuery.trim()) {
+      if (hasApiKey && !searchQuery.trim()) {
         setIsLoadingMore(true);
+        setAllLoadedProducts([]);
+        setCurrentPage(1);
+        setHasMoreProducts(true);
+        
         try {
-          const apiKey = localStorage.getItem('radiopopular_api_key');
-          const initialProducts = await searchRadioPopularProducts('', apiKey || undefined, 1, 100);
+          const initialProducts = await loadProductsWithCategory(selectedCategory, 1, 100);
           
           if (initialProducts.length > 0) {
-            const filteredProducts = filterProductsByCategory(initialProducts, selectedCategory);
-            setAllLoadedProducts(filteredProducts);
+            setAllLoadedProducts(initialProducts);
             setCurrentPage(2);
-            toast.success(`${filteredProducts.length} produtos iniciais carregados!`);
+            toast.success(`${initialProducts.length} produtos carregados!`);
           }
         } catch (error) {
           console.error('Erro ao carregar produtos iniciais:', error);
@@ -241,26 +144,13 @@ function MainContent() {
     };
 
     loadInitialProducts();
-  }, [hasApiKey, allLoadedProducts.length, searchQuery]);
-
-  // Aplicar filtro de categoria quando mudar
-  useEffect(() => {
-    if (selectedStore === 'radiopopular-api' && !searchQuery.trim()) {
-      // Recarregar produtos com nova categoria
-      setAllLoadedProducts([]);
-      setCurrentPage(1);
-      setHasMoreProducts(true);
-    }
-  }, [selectedCategory, selectedStore, searchQuery]);
+  }, [hasApiKey, selectedCategory, searchQuery, loadProductsWithCategory]);
 
   // Função para pesquisar na API da Rádio Popular
   const searchApiProducts = async (query: string) => {
     if (!query.trim()) {
       // Se não há pesquisa, voltar para o infinite scroll
       setApiProducts([]);
-      setAllLoadedProducts([]);
-      setCurrentPage(1);
-      setHasMoreProducts(true);
       return;
     }
 
@@ -269,12 +159,10 @@ function MainContent() {
       const apiKey = localStorage.getItem('radiopopular_api_key');
       const products = await searchRadioPopularProducts(query, apiKey || undefined, 1, 100);
       
-      // Aplicar filtro de categoria na pesquisa também
-      const filteredProducts = filterProductsByCategory(products, selectedCategory);
-      setApiProducts(filteredProducts);
+      setApiProducts(products);
       
-      if (filteredProducts.length > 0) {
-        toast.success(`${filteredProducts.length} produtos encontrados na Rádio Popular!`);
+      if (products.length > 0) {
+        toast.success(`${products.length} produtos encontrados na Rádio Popular!`);
       } else if (hasApiKey) {
         toast.info('Nenhum produto encontrado na Rádio Popular para esta pesquisa.');
       }
@@ -297,7 +185,7 @@ function MainContent() {
     }, 500);
 
     return () => clearTimeout(timeoutId);
-  }, [searchQuery, hasApiKey, selectedCategory]);
+  }, [searchQuery, hasApiKey]);
 
   // Filtrar produtos dos dados mock baseado na pesquisa
   const filteredStores = mockStores.map(store => ({
@@ -307,12 +195,15 @@ function MainContent() {
     )
   })).filter(store => store.products.length > 0);
 
-  // Criar loja virtual para produtos da API
+  // Criar loja virtual para produtos da API com IDs únicos
   const radioPopularStore: Store = {
     id: 'radiopopular-api',
     name: 'Rádio Popular',
     color: '#0066CC',
-    products: searchQuery.trim() ? apiProducts : allLoadedProducts
+    products: (searchQuery.trim() ? apiProducts : allLoadedProducts).map((product, index) => ({
+      ...product,
+      id: `rp-${product.id || index}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}` // ID único garantido
+    }))
   };
 
   // Função corrigida para detectar promoções
@@ -442,9 +333,8 @@ function MainContent() {
     { key: 'Casa e Jardim' as CategoryFilter, label: 'Casa e Jardim' },
     { key: 'Automóvel' as CategoryFilter, label: 'Automóvel' },
     { key: 'Saúde e Beleza' as CategoryFilter, label: 'Saúde e Beleza' },
-    { key: 'Livros e Papelaria' as CategoryFilter, label: 'Livros e Papelaria' },
     { key: 'Brinquedos' as CategoryFilter, label: 'Brinquedos' },
-    { key: 'Moda e Acessórios' as CategoryFilter, label: 'Moda e Acessórios' }
+    { key: 'Acessórios' as CategoryFilter, label: 'Acessórios' }
   ];
 
   const isLoading = isSearchingApi || isLoadingMore;
@@ -721,8 +611,8 @@ function MainContent() {
 
         {/* Lista de lojas e produtos */}
         <div className="space-y-8">
-          {allStores.map((store) => (
-            <StoreItem key={store.id} store={store} />
+          {allStores.map((store, storeIndex) => (
+            <StoreItem key={`store-${store.id}-${storeIndex}-${selectedCategory}-${activeFilter}-${Date.now()}`} store={store} />
           ))}
         </div>
 
